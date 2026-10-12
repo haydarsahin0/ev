@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>WG Kasası</title>
+  <meta name="description" content="Haydar, Sude ve Ezgi'nin ortak ev harcamaları — kim ne aldı, kim kime ne kadar borçlu." />
+  <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0d0d12" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="WG Kasası" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    try { const t = localStorage.getItem('wg-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="34" height="34" />
+      <div>
+        <strong>WG Kasası</strong>
+        <small>Haydar · Sude · Ezgi</small>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="sync-pill" id="syncPill" type="button" data-state="connecting">
+        <i></i><span>Bağlanıyor…</span>
+      </button>
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Temayı değiştir">
+        <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div class="banner" id="localBanner" hidden>
+      <div class="banner-ico">⚡</div>
+      <div>
+        <strong>Yerel moddasın.</strong>
+        Veriler şu an sadece bu cihazda saklanıyor. Üçünüzün aynı listeyi görmesi için
+        <code>config.js</code> dosyasına Firebase ayarlarını ekle (README'de 5 dakikalık adımlar var).
+      </div>
+      <button class="icon-btn sm" id="bannerClose" type="button" aria-label="Kapat">✕</button>
+    </div>
+
+    <section class="hero">
+      <p class="eyebrow">Ortak ev harcamaları</p>
+      <h1>Toplam <em>kasa</em></h1>
+      <div class="hero-total" id="heroTotal" data-v="0">0,00 €</div>
+      <div class="hero-stats">
+        <div><span id="statCount">0</span><small>kalem</small></div>
+        <div><span id="statAvg">0,00 €</span><small>kişi başı</small></div>
+        <div><span id="statLast">—</span><small>son eklenen</small></div>
+      </div>
+    </section>
+
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Kişiler"></nav>
+    <section class="people" id="people"></section>
+
+    <section class="summary" aria-labelledby="sumTitle">
+      <div class="section-head">
+        <p class="eyebrow">Otomatik hesap</p>
+        <h2 id="sumTitle">Hesaplaşma</h2>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Kim kime ne kadar göndermeli?</h3>
+          <span class="hint">En az transferle ödeşme</span>
+        </div>
+        <div id="transfers" class="transfers"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h3>Kim ne kadar harcadı?</h3>
+            <span class="hint">Ödediği · payına düşen · bakiye</span>
+          </div>
+          <div id="balances" class="balances"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Kategoriler</h3>
+            <span class="hint">Para nereye gidiyor?</span>
+          </div>
+          <div id="cats" class="cats"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Yapılan ödemeler</h3>
+          <span class="hint">“Ödendi” ile işaretlenen transferler</span>
+        </div>
+        <ul id="payments" class="payments"></ul>
+      </div>
+
+      <div class="card tools">
+        <div class="card-head">
+          <h3>Araçlar</h3>
+          <span class="hint">Dışa aktar, yedekle, sıfırla</span>
+        </div>
+        <div class="tool-grid">
+          <button class="tool" id="btnCsv" type="button">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 9h16M4 14.5h16M9.5 4v16"/></svg>
+            <span><strong>Excel'e aktar</strong><small>CSV dosyası indir</small></span>
+          </button>
+          <button class="tool" id="btnBackup" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5"/><path d="M4 16.5V20h16v-3.5"/></svg>
+            <span><strong>Yedek indir</strong><small>Tüm veriler (JSON)</small></span>
+          </button>
+          <label class="tool" id="btnRestore">
+            <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5"/><path d="M4 16.5V20h16v-3.5"/></svg>
+            <span><strong>Yedekten yükle</strong><small>JSON dosyası seç</small></span>
+            <input type="file" id="restoreInput" accept="application/json,.json" hidden />
+          </label>
+          <button class="tool" id="btnClearPayments" type="button">
+            <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4.5h4.5"/></svg>
+            <span><strong>Ödemeleri sıfırla</strong><small>Sadece ödeme geçmişi</small></span>
+          </button>
+          <button class="tool danger" id="btnResetAll" type="button">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+            <span><strong>Her şeyi sıfırla</strong><small>Yeni dönem başlat</small></span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Almanya'dan sevgilerle 🏠 · WG Kasası</span>
+  </footer>
+
+  <!-- Harcama ekle / düzenle -->
+  <dialog id="itemDialog" class="sheet">
+    <form method="dialog" id="itemForm" autocomplete="off">
+      <div class="sheet-head">
+        <h3 id="itemDialogTitle">Harcamayı düzenle</h3>
+        <button class="icon-btn sm" value="cancel" formnovalidate aria-label="Kapat">✕</button>
+      </div>
+      <label class="field">
+        <span>Ne alındı?</span>
+        <input name="name" maxlength="60" required placeholder="örn. Bulaşık deterjanı" />
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Tutar</span>
+          <div class="amount-field big"><input name="amount" inputmode="decimal" required placeholder="0,00" /><b>€</b></div>
+        </label>
+        <label class="field">
+          <span>Tarih</span>
+          <input name="date" type="date" required />
+        </label>
+      </div>
+      <label class="field">
+        <span>Kategori</span>
+        <select name="cat" id="dlgCat"></select>
+      </label>
+      <div class="field">
+        <span>Kim ödedi?</span>
+        <div class="chips" id="dlgPayer"></div>
+      </div>
+      <div class="field">
+        <span>Kimler arasında bölünsün?</span>
+        <div class="chips" id="dlgSplit"></div>
+        <small class="field-hint" id="dlgSplitHint"></small>
+      </div>
+      <label class="field">
+        <span>Not <em>(isteğe bağlı)</em></span>
+        <input name="note" maxlength="120" placeholder="örn. Lidl indirimi" />
+      </label>
+      <div class="sheet-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Vazgeç</button>
+        <button class="btn primary" value="save" id="itemSave">Kaydet</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Onay -->
+  <dialog id="confirmDialog" class="sheet narrow">
+    <form method="dialog">
+      <div class="confirm-ico" id="confirmIco">⚠️</div>
+      <h3 id="confirmTitle">Emin misin?</h3>
+      <p id="confirmText"></p>
+      <div class="sheet-actions">
+        <button class="btn ghost" value="cancel">Vazgeç</button>
+        <button class="btn danger" value="ok" id="confirmOk">Evet</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Senkron bilgisi -->
+  <dialog id="syncDialog" class="sheet narrow">
+    <form method="dialog">
+      <div class="confirm-ico" id="syncIco">☁️</div>
+      <h3 id="syncTitle"></h3>
+      <p id="syncText"></p>
+      <div class="sheet-actions">
+        <button class="btn primary" value="ok">Tamam</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span id="toastText"></span>
+    <button type="button" id="toastAction"></button>
+  </div>
+
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
