@@ -426,7 +426,9 @@ function setStatus(s) {
   pill.dataset.state = s;
   $('span', pill).textContent = st.label;
   pill.title = st.label;
-  $('#localBanner').hidden = s !== 'local' || lsGet('wg-banner-hidden') === '1';
+  const banner = $('#localBanner');
+  banner.hidden = s !== 'local' || lsGet('wg-banner-hidden') === '1';
+  banner.style.display = banner.hidden ? 'none' : '';
 }
 
 /* ───────── toast ───────── */
@@ -729,7 +731,7 @@ function bindEvents() {
     $('#syncText').textContent = st.text;
     $('#syncDialog').showModal();
   });
-  $('#bannerClose').addEventListener('click', () => { lsSet('wg-banner-hidden', '1'); $('#localBanner').hidden = true; });
+  $('#bannerClose').addEventListener('click', () => { lsSet('wg-banner-hidden', '1'); $('#localBanner').hidden = true; $('#localBanner').style.display = 'none'; });
 
   // close dialogs by clicking the backdrop
   $$('dialog').forEach((d) => d.addEventListener('click', (ev) => { if (ev.target === d) d.close('cancel'); }));
