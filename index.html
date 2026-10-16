@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=4" />
   <script>
     try { const t = localStorage.getItem('wg-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
   </script>
@@ -32,6 +32,10 @@
         <small>Haydar · Sude · Ezgi</small>
       </div>
     </div>
+    <nav class="viewnav" role="tablist" aria-label="Bölümler">
+      <button type="button" role="tab" data-view="kasa" aria-selected="true"><span class="vn-ico">💶</span><span class="vn-txt">Kasa</span></button>
+      <button type="button" role="tab" data-view="putz" aria-selected="false"><span class="vn-ico">🧹</span><span class="vn-txt">Putzplan</span><i class="vn-who avatar" id="navPutzWho"></i></button>
+    </nav>
     <div class="topbar-actions">
       <button class="sync-pill" id="syncPill" type="button" data-state="connecting">
         <i></i><span>Bağlanıyor…</span>
@@ -54,6 +58,7 @@
       <button class="icon-btn sm" id="bannerClose" type="button" aria-label="Kapat">✕</button>
     </div>
 
+    <div class="view" id="view-kasa">
     <section class="hero">
       <p class="eyebrow">Ortak ev harcamaları</p>
       <h1>Toplam <em>kasa</em></h1>
@@ -137,6 +142,51 @@
         </div>
       </div>
     </section>
+    </div>
+
+    <div class="view" id="view-putz" hidden>
+      <section class="hero putz-hero">
+        <p class="eyebrow">Putzplan · <span id="putzWeekLabel"></span></p>
+        <h1>Bu hafta <em>temizlik</em> sırası</h1>
+        <p class="putz-sub">Her hafta bir kişi, seçtiği bir günde evi temizler. Sıra her pazartesi otomatik geçer.</p>
+      </section>
+
+      <div class="card putz-now" id="putzNow"></div>
+
+      <div class="grid-2 putz-grid">
+        <div class="card">
+          <div class="card-head">
+            <h3>Sıradaki haftalar</h3>
+            <span class="hint">Dokun: gün seç veya takas et</span>
+          </div>
+          <ul class="weeks" id="putzNext"></ul>
+        </div>
+        <div class="putz-side">
+          <div class="card">
+            <div class="card-head">
+              <h3>Temizlik skoru</h3>
+              <span class="hint">Tamamlanan haftalar</span>
+            </div>
+            <div class="scores" id="putzScore"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Sıra ayarları</h3>
+              <span class="hint">Herkes için geçerli</span>
+            </div>
+            <div id="putzSettings"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Geçmiş haftalar</h3>
+          <span class="hint">Unutulan bir hafta mı var? Dokunup işaretle</span>
+        </div>
+        <ul class="weeks" id="putzPast"></ul>
+      </div>
+    </div>
   </main>
 
   <footer class="foot">
@@ -188,6 +238,17 @@
     </form>
   </dialog>
 
+  <!-- Putzplan hafta detayı / takas -->
+  <dialog id="weekDialog" class="sheet">
+    <form method="dialog">
+      <div class="sheet-head">
+        <h3 id="weekDlgTitle"></h3>
+        <button class="icon-btn sm" value="cancel" aria-label="Kapat">✕</button>
+      </div>
+      <div id="weekDlgBody"></div>
+    </form>
+  </dialog>
+
   <!-- Onay -->
   <dialog id="confirmDialog" class="sheet narrow">
     <form method="dialog">
@@ -218,7 +279,7 @@
     <button type="button" id="toastAction"></button>
   </div>
 
-  <script src="config.js?v=3"></script>
-  <script type="module" src="app.js?v=3"></script>
+  <script src="config.js?v=4"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>

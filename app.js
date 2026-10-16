@@ -3,9 +3,10 @@
 const CONFIG = window.WG_CONFIG || {};
 
 const PEOPLE = [
-  { id: 'haydar', name: 'Haydar' },
-  { id: 'sude', name: 'Sude' },
-  { id: 'ezgi', name: 'Ezgi' },
+  // gen/dat/loc: Turkish case suffixes (Haydar'ın / Haydar'a / Haydar'da)
+  { id: 'haydar', name: 'Haydar', gen: "Haydar'ın", dat: "Haydar'a", loc: "Haydar'da" },
+  { id: 'sude', name: 'Sude', gen: "Sude'nin", dat: "Sude'ye", loc: "Sude'de" },
+  { id: 'ezgi', name: 'Ezgi', gen: "Ezgi'nin", dat: "Ezgi'ye", loc: "Ezgi'de" },
 ];
 const PIDS = PEOPLE.map((p) => p.id);
 const person = (id) => PEOPLE.find((p) => p.id === id) || { id, name: id };
@@ -34,6 +35,15 @@ function guessCat(name) {
   for (const c of CATS) if (c.keys.some((k) => s.includes(k))) return c.id;
   return 'diger';
 }
+
+const PUTZ_FIRST_WEEK = '2026-10-12'; // first week of the plan (Haydar)
+const PUTZ_TASKS = [
+  { id: 'supurge', label: 'Ortak alanların süpürülmesi', emoji: '🧹' },
+  { id: 'banyo', label: 'Banyo ve klozet temizlemesi', emoji: '🚽' },
+  { id: 'ocak', label: 'Mutfak ocağını silmek', emoji: '🍳' },
+];
+const DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const DAYS_FULL = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
 /* ───────── helpers ───────── */
 const $ = (s, r = document) => r.querySelector(s);
@@ -155,13 +165,13 @@ class FirebaseStore {
     return this.fx.update(this.root, changes);
   }
   replaceAll(data) {
-    const has = data && (Object.keys(data.expenses || {}).length || Object.keys(data.settlements || {}).length);
+    const has = data && Object.values(data).some((v) => v && Object.keys(v).length);
     return this.fx.set(this.root, has ? data : null);
   }
 }
 
 /* ───────── state ───────── */
-let state = { expenses: {}, settlements: {} };
+let state = normalize({});
 let store;
 let firstRender = true;
 const seenIds = new Set();
@@ -180,6 +190,26 @@ function normalize(data) {
     if (!s || !PIDS.includes(s.from) || !PIDS.includes(s.to) || !(s.amount > 0)) continue;
     out.settlements[id] = { ...s, id, amount: Math.round(s.amount) };
   }
+  out.putzWeeks = {};
+  for (const [k, w] of Object.entries(data?.putzWeeks || {})) {
+    if (!w || !/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+    const v = {};
+    if (PIDS.includes(w.person)) v.person = w.person;
+    if (Number.isInteger(w.day) && w.day >= 0 && w.day <= 6) v.day = w.day;
+    if (w.done) { v.done = true; if (w.doneAt) v.doneAt = w.doneAt; }
+    const tasks = Object.keys(w.tasks || {}).filter((t) => w.tasks[t] && PUTZ_TASKS.some((x) => x.id === t));
+    if (tasks.length) v.tasks = Object.fromEntries(tasks.map((t) => [t, true]));
+    if (Object.keys(v).length) out.putzWeeks[k] = v;
+  }
+  const c = data?.putzConfig?.main || {};
+  const order = Array.isArray(c.order) ? c.order : Object.values(c.order || {});
+  out.putzConfig = {
+    main: {
+      order: order.length === PIDS.length && PIDS.every((p) => order.includes(p)) ? order : [...PIDS],
+      anchorWeek: /^\d{4}-\d{2}-\d{2}$/.test(c.anchorWeek || '') ? c.anchorWeek : PUTZ_FIRST_WEEK,
+      anchorIdx: Number.isInteger(c.anchorIdx) && c.anchorIdx >= 0 && c.anchorIdx < PIDS.length ? c.anchorIdx : 0,
+    },
+  };
   return out;
 }
 
@@ -335,6 +365,7 @@ function render() {
   renderBalances(r);
   renderCats(r);
   renderPayments();
+  renderPutz();
   firstRender = false;
 }
 
@@ -556,7 +587,10 @@ function exportBackup() {
 async function importBackup(file) {
   try {
     const json = JSON.parse(await file.text());
-    const data = normalize(json.data || json);
+    const raw = json.data || json;
+    const data = normalize(raw);
+    if (!raw.putzWeeks) data.putzWeeks = state.putzWeeks;
+    if (!raw.putzConfig) data.putzConfig = state.putzConfig;
     const n = Object.keys(data.expenses).length;
     const ok = await confirmBox({ icon: '📥', title: 'Yedekten yüklensin mi?', text: `Yedekte ${n} harcama ve ${Object.keys(data.settlements).length} ödeme var. Şu anki tüm veriler bunlarla değiştirilecek.`, ok: 'Yükle', danger: false });
     if (!ok) return;
@@ -624,11 +658,11 @@ function bindEvents() {
     } else if (b.dataset.clear) {
       const pid = b.dataset.clear;
       const mine = Object.values(state.expenses).filter((e) => e.payer === pid);
-      const ok = await confirmBox({ icon: '🧹', title: `${person(pid).name}'in listesi temizlensin mi?`, text: `${mine.length} harcama (${euro(mine.reduce((s, e) => s + e.amount, 0))}) silinecek. Hemen ardından geri alabilirsin.`, ok: 'Temizle' });
+      const ok = await confirmBox({ icon: '🧹', title: `${person(pid).gen} listesi temizlensin mi?`, text: `${mine.length} harcama (${euro(mine.reduce((s, e) => s + e.amount, 0))}) silinecek. Hemen ardından geri alabilirsin.`, ok: 'Temizle' });
       if (!ok) return;
       const del = Object.fromEntries(mine.map((e) => [`expenses/${e.id}`, null]));
       const back = Object.fromEntries(mine.map((e) => [`expenses/${e.id}`, e]));
-      save(del, `${person(pid).name}'in listesi temizlendi`, () => save(back, 'Geri getirildi'));
+      save(del, `${person(pid).gen} listesi temizlendi`, () => save(back, 'Geri getirildi'));
     }
   });
 
@@ -673,7 +707,7 @@ function bindEvents() {
     const b = ev.target.closest('[data-pay]');
     if (!b) return;
     const t = JSON.parse(b.dataset.pay);
-    const ok = await confirmBox({ icon: '💸', title: 'Ödeme yapıldı mı?', text: `${person(t.from).name}, ${person(t.to).name}'e ${euro(t.amount)} gönderdi olarak kaydedilecek.`, ok: 'Evet, ödendi', danger: false });
+    const ok = await confirmBox({ icon: '💸', title: 'Ödeme yapıldı mı?', text: `${person(t.from).name}, ${person(t.to).dat} ${euro(t.amount)} gönderdi olarak kaydedilecek.`, ok: 'Evet, ödendi', danger: false });
     if (!ok) return;
     const s = { id: uid(), from: t.from, to: t.to, amount: t.amount, date: todayISO(), createdAt: Date.now() };
     save({ [`settlements/${s.id}`]: s }, 'Ödeme kaydedildi 💸', () => save({ [`settlements/${s.id}`]: null }, 'Geri alındı'));
@@ -705,12 +739,12 @@ function bindEvents() {
   $('#btnResetAll').addEventListener('click', async () => {
     const n = Object.keys(state.expenses).length + Object.keys(state.settlements).length;
     if (!n) { toast('Zaten her şey sıfır ✨'); return; }
-    const ok = await confirmBox({ icon: '🗑️', title: 'Her şey sıfırlansın mı?', text: 'Üç kişinin tüm harcamaları ve ödeme geçmişi silinecek — herkes için. İstersen önce “Yedek indir” ile yedek al.', ok: 'Sıfırla' });
+    const ok = await confirmBox({ icon: '🗑️', title: 'Kasa sıfırlansın mı?', text: 'Üç kişinin tüm harcamaları ve ödeme geçmişi silinecek — herkes için. Putzplan olduğu gibi kalır. İstersen önce “Yedek indir” ile yedek al.', ok: 'Sıfırla' });
     if (!ok) return;
     const before = structuredClone(state);
     try {
-      await store.replaceAll({});
-      toast('Her şey sıfırlandı — yeni dönem başladı ✨', 'Geri al', () => store.replaceAll(before).then(() => toast('Geri getirildi')));
+      await store.replaceAll({ ...state, expenses: {}, settlements: {} });
+      toast('Kasa sıfırlandı — yeni dönem başladı ✨', 'Geri al', () => store.replaceAll(before).then(() => toast('Geri getirildi')));
     } catch (e) {
       console.error(e);
       toast('Sıfırlanamadı — bağlantıyı kontrol et.');
@@ -737,10 +771,341 @@ function bindEvents() {
   $$('dialog').forEach((d) => d.addEventListener('click', (ev) => { if (ev.target === d) d.close('cancel'); }));
 }
 
+/* ───────── Putzplan ───────── */
+// Weeks are keyed by their Monday ("YYYY-MM-DD"); date math runs in UTC to dodge DST.
+const DAY_MS = 86400000;
+const utc = (key) => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+const keyOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+const addDays = (key, n) => keyOf(utc(key) + n * DAY_MS);
+const weeksBetween = (a, b) => Math.round((utc(b) - utc(a)) / (7 * DAY_MS));
+const todayIdx = () => (new Date().getDay() + 6) % 7;
+const currentWeek = () => addDays(todayISO(), -todayIdx());
+const mod = (n, m) => ((n % m) + m) % m;
+const fmtDay = (key, opts = { day: 'numeric', month: 'short' }) => new Date(utc(key)).toLocaleDateString('tr-TR', { ...opts, timeZone: 'UTC' });
+function weekRange(key) {
+  const end = addDays(key, 6);
+  return key.slice(5, 7) === end.slice(5, 7)
+    ? `${new Date(utc(key)).getUTCDate()} – ${fmtDay(end)}`
+    : `${fmtDay(key)} – ${fmtDay(end)}`;
+}
+
+const putzCfg = () => state.putzConfig.main;
+const weekData = (key) => state.putzWeeks[key] || {};
+const rotationPerson = (key) => {
+  const c = putzCfg();
+  return c.order[mod(c.anchorIdx + weeksBetween(c.anchorWeek, key), c.order.length)];
+};
+const personOf = (key) => weekData(key).person || rotationPerson(key);
+
+function weekStatus(key) {
+  const w = weekData(key);
+  const now = currentWeek();
+  if (w.done) return { cls: 'pos', text: 'Temizlendi ✓' };
+  if (key < now) return { cls: 'neg', text: 'Yapılmadı' };
+  if (key === now) {
+    const td = todayIdx();
+    if (w.day == null) return { cls: 'warn', text: 'Gün seçilmedi' };
+    if (w.day < td) return { cls: 'neg', text: `Gecikti · ${DAYS_FULL[w.day]}` };
+    if (w.day === td) return { cls: 'today', text: 'Bugün temizlik günü!' };
+    return { cls: 'info', text: `${DAYS_FULL[w.day]} günü` };
+  }
+  return w.day == null ? { cls: 'zero', text: 'Gün seçilmedi' } : { cls: 'info', text: DAYS_FULL[w.day] };
+}
+
+function weekCard(key, { inDialog = false } = {}) {
+  const p = personOf(key);
+  const w = weekData(key);
+  const st = weekStatus(key);
+  const now = currentWeek();
+  const isNow = key === now;
+  const editable = key >= now || inDialog;
+  const doneTasks = PUTZ_TASKS.filter((t) => w.tasks?.[t.id]).length;
+  const label = isNow ? 'Bu haftanın temizlikçisi' : key > now ? `${weeksBetween(now, key)} hafta sonra` : 'Geçmiş hafta';
+  return `
+    <div class="pn" data-person="${p}">
+      <div class="pn-top">
+        ${avatar(p, 'xl')}
+        <div class="pn-who">
+          <span class="pn-label">${esc(label)}</span>
+          <h2>${esc(person(p).name)}</h2>
+          <span class="pn-range">${esc(weekRange(key))}</span>
+        </div>
+        <span class="status ${st.cls}">${esc(st.text)}</span>
+      </div>
+      ${editable ? `
+      <div class="pn-sec">
+        <h4>${isNow ? 'Hangi gün temizleyeceksin?' : 'Temizlik günü'}</h4>
+        <div class="days">
+          ${DAYS_SHORT.map((d, i) => {
+            const dk = addDays(key, i);
+            const cls = [dk === todayISO() ? 'is-today' : '', dk < todayISO() ? 'is-past' : ''].join(' ');
+            return `<button type="button" class="day ${cls}" data-day="${i}" data-wk="${key}" aria-pressed="${w.day === i}" aria-label="${DAYS_FULL[i]} ${esc(fmtDay(dk))}"><small>${d}</small><b>${new Date(utc(dk)).getUTCDate()}</b></button>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="pn-sec">
+        <h4>Yapılacaklar <small>${doneTasks}/${PUTZ_TASKS.length}</small></h4>
+        <div class="progress"><i style="width:${(doneTasks / PUTZ_TASKS.length) * 100}%"></i></div>
+        <div class="tasks">
+          ${PUTZ_TASKS.map((t, i) => `<button type="button" class="task" data-task="${t.id}" data-wk="${key}" aria-pressed="${!!w.tasks?.[t.id]}"><span class="task-box">${ICON.check}</span><span class="task-txt"><small>${i + 1}.</small> ${esc(t.label)}</span><span class="task-emoji">${t.emoji}</span></button>`).join('')}
+        </div>
+      </div>` : ''}
+      <div class="pn-actions">
+        ${key >= now && !w.done ? `<button type="button" class="btn ghost" data-swap="${key}">⇄ Takas et</button>` : '<span></span>'}
+        <button type="button" class="btn ${w.done ? 'ghost' : 'primary'} pn-done" data-done="${key}">${w.done ? 'Geri al' : `${ICON.check}Temizledim`}</button>
+      </div>
+    </div>`;
+}
+
+function weekRow(key) {
+  const p = personOf(key);
+  const st = weekStatus(key);
+  return `
+    <li data-person="${p}">
+      <button type="button" class="week-btn" data-open-week="${key}">
+        ${avatar(p, 'sm')}
+        <span class="wk-main"><b>${esc(person(p).name)}</b><small>${esc(weekRange(key))}</small></span>
+        <span class="status ${st.cls}">${esc(st.text)}</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+    </li>`;
+}
+
+function renderPutz() {
+  const now = currentWeek();
+  const cur = personOf(now);
+  const curW = weekData(now);
+
+  // nav indicator
+  const who = $('#navPutzWho');
+  who.dataset.person = cur;
+  who.textContent = person(cur).name[0];
+  who.classList.toggle('alert', !curW.done && curW.day === todayIdx());
+  who.title = `Bu hafta: ${person(cur).name}`;
+
+  $('#putzWeekLabel').textContent = weekRange(now);
+  $('#putzNow').innerHTML = weekCard(now);
+
+  $('#putzNext').innerHTML = Array.from({ length: 6 }, (_, i) => weekRow(addDays(now, 7 * (i + 1)))).join('');
+
+  const past = [];
+  for (let k = addDays(now, -7); k >= PUTZ_FIRST_WEEK && past.length < 8; k = addDays(k, -7)) past.push(k);
+  $('#putzPast').innerHTML = past.length
+    ? past.map(weekRow).join('')
+    : `<li class="muted-empty">Geçmiş haftalar burada görünecek. İlk hafta: ${esc(weekRange(PUTZ_FIRST_WEEK))}.</li>`;
+
+  // score
+  const count = Object.fromEntries(PIDS.map((p) => [p, 0]));
+  const missed = { ...count };
+  for (const [k, w] of Object.entries(state.putzWeeks)) if (w.done) count[personOf(k)]++;
+  for (let k = addDays(now, -7); k >= PUTZ_FIRST_WEEK; k = addDays(k, -7)) if (!weekData(k).done) missed[personOf(k)]++;
+  $('#putzScore').innerHTML = PEOPLE.map((p) => {
+    let next = now;
+    for (let i = 0; i < 60 && (personOf(next) !== p.id || weekData(next).done); i++) next = addDays(next, 7);
+    const nextTxt = next === now ? 'Bu hafta sırada!' : `Sıradaki: ${weekRange(next)}`;
+    return `
+      <div class="score" data-person="${p.id}">
+        ${avatar(p.id, 'sm')}
+        <div class="score-main"><b>${esc(p.name)}</b><small>${esc(nextTxt)}</small></div>
+        <div class="score-num"><strong>${count[p.id]}</strong><small>kez${missed[p.id] ? ` · ${missed[p.id]} kaçırdı` : ''}</small></div>
+      </div>`;
+  }).join('');
+
+  // settings
+  const c = putzCfg();
+  const ordered = Array.from({ length: PIDS.length }, (_, i) => c.order[mod(c.order.indexOf(cur) + i, PIDS.length)]);
+  $('#putzSettings').innerHTML = `
+    <div class="field">
+      <span>Bu hafta sıra kimde?</span>
+      <div class="chips">${PEOPLE.map((p) => `
+        <label class="chip" data-person="${p.id}"><input type="radio" name="putzWho" value="${p.id}" ${p.id === cur ? 'checked' : ''} />${avatar(p.id)}${esc(p.name)}</label>`).join('')}
+      </div>
+      <small class="field-hint">Değiştirince sıra bu haftadan itibaren buna göre devam eder.</small>
+    </div>
+    <div class="field">
+      <span>Sıra</span>
+      <div class="order-row">
+        <div class="order">${ordered.map((p) => `${avatar(p, 'xs')}<b>${esc(person(p).name)}</b>`).join('<i>→</i>')}<i>→ …</i></div>
+        <button type="button" class="btn ghost sm-btn" id="putzReverse">⇅ Yönü değiştir</button>
+      </div>
+    </div>`;
+
+  if (openWeek && $('#weekDialog').open) renderWeekDialog();
+}
+
+let openWeek = null; // { key, mode: 'detail' | 'swap' }
+function renderWeekDialog() {
+  const { key, mode } = openWeek;
+  const body = $('#weekDlgBody');
+  if (mode === 'swap') {
+    const now = currentWeek();
+    const me = personOf(key);
+    const options = Array.from({ length: 8 }, (_, i) => addDays(now, 7 * i))
+      .filter((k) => k !== key && !weekData(k).done && personOf(k) !== me);
+    $('#weekDlgTitle').textContent = 'Haftayı takas et';
+    body.innerHTML = `
+      <p class="swap-intro">${avatar(me, 'xs')} <b>${esc(person(me).name)}</b>, ${esc(weekRange(key))} haftasını kiminle değiştirsin?</p>
+      <ul class="weeks swap-list">${options.map((k) => `
+        <li data-person="${personOf(k)}"><button type="button" class="week-btn" data-swap-with="${k}">
+          ${avatar(personOf(k), 'sm')}
+          <span class="wk-main"><b>${esc(person(personOf(k)).name)}</b><small>${esc(weekRange(k))}${k === now ? ' · bu hafta' : ''}</small></span>
+          <span class="status info">⇄ Takas</span>
+        </button></li>`).join('') || '<li class="muted-empty">Takas edilebilecek hafta yok.</li>'}
+      </ul>
+      <small class="field-hint">Takas edilen haftalarda seçilmiş günler sıfırlanır.</small>`;
+  } else {
+    $('#weekDlgTitle').textContent = weekRange(key);
+    body.innerHTML = weekCard(key, { inDialog: true });
+  }
+}
+function openWeekDialog(key, mode = 'detail') {
+  openWeek = { key, mode };
+  renderWeekDialog();
+  const d = $('#weekDialog');
+  if (!d.open) d.showModal();
+}
+
+function savePutz(key, w, msg, undoW) {
+  const clean = { ...w };
+  if (clean.person && clean.person === rotationPerson(key)) delete clean.person;
+  if (clean.tasks && !Object.keys(clean.tasks).length) delete clean.tasks;
+  const val = Object.keys(clean).length ? clean : null;
+  const undo = undoW === undefined ? undefined : () => save({ [`putzWeeks/${key}`]: Object.keys(undoW).length ? undoW : null }, 'Geri alındı');
+  return save({ [`putzWeeks/${key}`]: val }, msg, undo);
+}
+
+// Swaps are stored as explicit people, so they're meaningless once the rotation changes.
+function rotationChanges(cfg) {
+  const now = currentWeek();
+  const changes = { 'putzConfig/main': cfg };
+  let dropped = 0;
+  for (const [k, w] of Object.entries(state.putzWeeks)) {
+    if (k < now || !w.person) continue;
+    const c = { ...w }; delete c.person;
+    if (k !== now) dropped++;
+    changes[`putzWeeks/${k}`] = Object.keys(c).length ? c : null;
+  }
+  return { changes, dropped };
+}
+
+function setView(v, push = true) {
+  $$('.viewnav [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === v)));
+  $('#view-kasa').hidden = v !== 'kasa';
+  $('#view-putz').hidden = v !== 'putz';
+  $('#view-kasa').style.display = v === 'kasa' ? '' : 'none';
+  $('#view-putz').style.display = v === 'putz' ? '' : 'none';
+  if (push) {
+    history.replaceState(null, '', v === 'putz' ? '#putz' : location.pathname + location.search);
+    scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
+
+function bindPutzEvents() {
+  $('.viewnav').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-view]');
+    if (b) setView(b.dataset.view);
+  });
+  addEventListener('hashchange', () => setView(location.hash === '#putz' ? 'putz' : 'kasa', false));
+
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b || !b.closest('#view-putz, #weekDialog')) return;
+    const key = b.dataset.wk || b.dataset.done || b.dataset.swap || b.dataset.openWeek;
+
+    if (b.dataset.day != null) {
+      const w = { ...weekData(key) };
+      const day = Number(b.dataset.day);
+      const p = person(personOf(key)).name;
+      if (w.day === day) { delete w.day; savePutz(key, w, 'Gün seçimi kaldırıldı'); }
+      else { w.day = day; savePutz(key, w, `${p} ${DAYS_FULL[day]} günü temizleyecek 🧽`); }
+    } else if (b.dataset.task) {
+      const old = weekData(key);
+      const w = { ...old, tasks: { ...(old.tasks || {}) } };
+      const t = PUTZ_TASKS.find((x) => x.id === b.dataset.task);
+      if (w.tasks[t.id]) {
+        delete w.tasks[t.id];
+        if (w.done) { delete w.done; delete w.doneAt; }
+        savePutz(key, w);
+      } else {
+        w.tasks[t.id] = true;
+        if (PUTZ_TASKS.every((x) => w.tasks[x.id])) {
+          w.done = true; w.doneAt = Date.now();
+          savePutz(key, w, `Hepsi tamam! Teşekkürler ${person(personOf(key)).name} ✨`, old);
+          sparkle(b);
+        } else {
+          savePutz(key, w, `✓ ${t.label}`);
+        }
+      }
+    } else if (b.dataset.done) {
+      const old = weekData(key);
+      const w = { ...old };
+      if (w.done) { delete w.done; delete w.doneAt; savePutz(key, w, 'İşaret kaldırıldı', old); }
+      else {
+        w.done = true; w.doneAt = Date.now();
+        w.tasks = Object.fromEntries(PUTZ_TASKS.map((t) => [t.id, true]));
+        savePutz(key, w, `Harika ${person(personOf(key)).name}! Ev pırıl pırıl ✨`, old);
+        sparkle(b);
+      }
+    } else if (b.dataset.swap) {
+      openWeekDialog(key, 'swap');
+    } else if (b.dataset.openWeek) {
+      openWeekDialog(key, 'detail');
+    } else if (b.dataset.swapWith) {
+      const a = openWeek.key, other = b.dataset.swapWith;
+      const pa = personOf(a), pb = personOf(other);
+      const wa = { ...weekData(a), person: pb }; delete wa.day;
+      const wb = { ...weekData(other), person: pa }; delete wb.day;
+      const clean = (k, w) => { const c = { ...w }; if (c.person === rotationPerson(k)) delete c.person; return Object.keys(c).length ? c : null; };
+      const oldA = state.putzWeeks[a] || null, oldB = state.putzWeeks[other] || null;
+      $('#weekDialog').close();
+      save({ [`putzWeeks/${a}`]: clean(a, wa), [`putzWeeks/${other}`]: clean(other, wb) },
+        `${person(pa).name} ⇄ ${person(pb).name} haftaları takas edildi`,
+        () => save({ [`putzWeeks/${a}`]: oldA, [`putzWeeks/${other}`]: oldB }, 'Geri alındı'));
+    } else if (b.id === 'putzReverse') {
+      const c = putzCfg();
+      const now = currentWeek();
+      const order = [c.order[0], c.order[2], c.order[1]];
+      const { changes, dropped } = rotationChanges({ order, anchorWeek: now, anchorIdx: order.indexOf(personOf(now)) });
+      save(changes, `Sıranın yönü değiştirildi${dropped ? ' · takaslar sıfırlandı' : ''}`);
+    }
+  });
+
+  document.addEventListener('change', (ev) => {
+    if (ev.target.name !== 'putzWho') return;
+    const p = ev.target.value;
+    const now = currentWeek();
+    const c = putzCfg();
+    const { changes, dropped } = rotationChanges({ order: c.order, anchorWeek: now, anchorIdx: c.order.indexOf(p) });
+    save(changes, `Bu hafta sıra ${person(p).loc}${dropped ? ' · takaslar sıfırlandı' : ''}`);
+  });
+
+  $('#weekDialog').addEventListener('close', () => { openWeek = null; });
+}
+
+function sparkle(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect();
+  const emojis = ['✨', '🫧', '🧽', '⭐', '💫'];
+  for (let i = 0; i < 14; i++) {
+    const s = document.createElement('span');
+    s.className = 'spark';
+    s.textContent = emojis[i % emojis.length];
+    const a = (Math.PI * 2 * i) / 14, d = 60 + Math.random() * 50;
+    s.style.left = `${r.left + r.width / 2}px`;
+    s.style.top = `${r.top + r.height / 2}px`;
+    s.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+    s.style.setProperty('--dy', `${Math.sin(a) * d - 20}px`);
+    document.body.append(s);
+    setTimeout(() => s.remove(), 900);
+  }
+}
+
 /* ───────── boot ───────── */
 async function boot() {
   buildSkeleton();
   bindEvents();
+  bindPutzEvents();
+  setView(location.hash === '#putz' ? 'putz' : 'kasa', false);
   render();
 
   const onData = (data) => { state = normalize(data); render(); };

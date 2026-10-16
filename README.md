@@ -11,6 +11,18 @@ Haydar, Sude ve Ezgi'nin WG'sinde ortak alınan eşyaların parasını adil böl
 - Excel'e aktarma (CSV), JSON yedek indirme / yükleme.
 - Açık / koyu tema, telefona uygulama gibi eklenebilir (Ana Ekrana Ekle).
 
+### 🧹 Putzplan
+
+Üstteki **Putzplan** sekmesinde (doğrudan link: `…/ev/#putz`):
+
+- Her hafta **sadece bir kişi** temizlik yapar; sıra **Haydar → Sude → Ezgi** şeklinde her pazartesi otomatik geçer.
+- Sırası gelen kişi haftanın **hangi gününde** temizleyeceğini seçer.
+- Yapılacaklar listesi işaretlenir: **1) Ortak alanların süpürülmesi, 2) Banyo ve klozet temizlemesi, 3) Mutfak ocağını silmek.**
+  Üçü de işaretlenince hafta “Temizlendi ✓” olur (ya da direkt **Temizledim** butonu).
+- Biri o hafta yoksa haftasını başka biriyle **takas** edebilir.
+- **Temizlik skoru**: kim kaç kez temizledi, kim kaçırdı, kimin sırası ne zaman.
+- **Sıra ayarları**: bu hafta sıranın kimde olduğu ve sıranın yönü değiştirilebilir.
+
 Kurulum gerektirmeyen tek dosyalık statik bir site: `index.html`, `styles.css`, `app.js`, `config.js`.
 
 ---
